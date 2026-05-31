@@ -15,7 +15,7 @@ def get_db():
     conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
             user_id     INTEGER PRIMARY KEY,
-            first_name  TEXT,
+            username    TEXT,
             balance     INTEGER DEFAULT 100,
             cats        INTEGER DEFAULT 0,
             last_daily  TEXT DEFAULT ''
@@ -24,15 +24,15 @@ def get_db():
     conn.commit()
     return conn
 
-def get_user(user_id, first_name=""):
+def get_user(user_id, username=""):
     conn = get_db()
     row = conn.execute("SELECT * FROM users WHERE user_id=?", (user_id,)).fetchone()
     if not row:
-        conn.execute("INSERT INTO users (user_id, first_name) VALUES (?,?)", (user_id, first_name))
+        conn.execute("INSERT INTO users (user_id, username) VALUES (?,?)", (user_id, username))
         conn.commit()
         row = conn.execute("SELECT * FROM users WHERE user_id=?", (user_id,)).fetchone()
     conn.close()
-    return {"user_id": row[0], "first_name": row[1], "balance": row[2], "cats": row[3], "last_daily": row[4]}
+    return {"user_id": row[0], "username": row[1], "balance": row[2], "cats": row[3], "last_daily": row[4]}
 
 def update_balance(user_id, amount):
     conn = get_db()
@@ -54,7 +54,7 @@ def add_cat(user_id):
 
 def get_top():
     conn = get_db()
-    rows = conn.execute("SELECT first_name, balance FROM users ORDER BY balance DESC LIMIT 10").fetchall()
+    rows = conn.execute("SELECT username, balance FROM users ORDER BY balance DESC LIMIT 10").fetchall()
     conn.close()
     return rows
 
@@ -66,7 +66,7 @@ KEYBOARD = ReplyKeyboardMarkup([
 
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
-    get_user(u.id, u.first_name)
+    get_user(u.id, u.username or u.first_name)
     await update.message.reply_text(
         f"🐱 سلام {u.first_name}! خوش اومدی به *بانک‌میو*!\n\n"
         "🪙 واحد پولی ما *میوپوینت* هست!\n"
@@ -78,7 +78,7 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def balance(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
-    user = get_user(u.id, u.first_name)
+    user = get_user(u.id, u.username or u.first_name)
     await update.message.reply_text(
         f"💰 *کیف پول میوپوینت*\n\n"
         f"🪙 موجودی: *{user['balance']} میوپوینت*\n"
@@ -90,10 +90,13 @@ async def balance(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def daily(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
-    user = get_user(u.id, u.first_name)
+    user = get_user(u.id, u.username or u.first_name)
     today = str(date.today())
     if user["last_daily"] == today:
-        await update.message.reply_text("⏳ جایزه روزانه‌ات رو قبلاً گرفتی!\nفردا دوباره بیا 😸", reply_markup=KEYBOARD)
+        await update.message.reply_text(
+            "⏳ جایزه روزانه‌ات رو قبلاً گرفتی!\nفردا دوباره بیا 😸",
+            reply_markup=KEYBOARD
+        )
         return
     amount = random.randint(10, 50)
     update_balance(u.id, amount)
@@ -102,19 +105,21 @@ async def daily(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"🎉 *جایزه روزانه دریافت شد!*\n\n"
         f"🪙 *+{amount} میوپوینت* به حسابت اضافه شد!\n"
-        f"موجودی جدید: *{new_bal} میوپوینت*\n\nفردا دوباره بیا 😺",
+        f"موجودی جدید: *{new_bal} میوپوینت*\n\n"
+        f"فردا دوباره بیا 😺",
         parse_mode="Markdown",
         reply_markup=KEYBOARD
     )
 
 async def transfer(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
-    user = get_user(u.id, u.first_name)
+    user = get_user(u.id, u.username or u.first_name)
     args = ctx.args
     if len(args) < 2:
         await update.message.reply_text(
             "📤 *نحوه انتقال:*\n\n`/transfer @username مقدار`\n\nمثال:\n`/transfer @GorbehKhan 50`",
-            parse_mode="Markdown", reply_markup=KEYBOARD
+            parse_mode="Markdown",
+            reply_markup=KEYBOARD
         )
         return
     target_username = args[0].replace("@", "")
@@ -128,26 +133,34 @@ async def transfer(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
     total = amount + 2
     if user["balance"] < total:
-        await update.message.reply_text(f"😿 موجودیت کافی نیست!\nنیاز داری: {total} میوپوینت\nموجودی فعلی: {user['balance']} میوپوینت", reply_markup=KEYBOARD)
+        await update.message.reply_text(
+            f"😿 موجودیت کافی نیست!\nنیاز داری: {total} میوپوینت\nموجودی فعلی: {user['balance']} میوپوینت",
+            reply_markup=KEYBOARD
+        )
         return
     conn = get_db()
-    target = conn.execute("SELECT * FROM users WHERE first_name=?", (target_username,)).fetchone()
+    target = conn.execute("SELECT * FROM users WHERE username=?", (target_username,)).fetchone()
     conn.close()
     if not target:
-        await update.message.reply_text(f"😿 کاربر {target_username} پیدا نشد!", reply_markup=KEYBOARD)
+        await update.message.reply_text(f"😿 کاربر @{target_username} پیدا نشد!", reply_markup=KEYBOARD)
         return
     update_balance(u.id, -total)
     update_balance(target[0], amount)
     await update.message.reply_text(
-        f"✅ *انتقال موفق!*\n\n📤 {amount} میوپوینت به {target_username} فرستادی\nموجودی جدید: {user['balance'] - total} میوپوینت",
-        parse_mode="Markdown", reply_markup=KEYBOARD
+        f"✅ *انتقال موفق!*\n\n📤 {amount} میوپوینت به @{target_username} فرستادی\nموجودی جدید: {user['balance'] - total} میوپوینت",
+        parse_mode="Markdown",
+        reply_markup=KEYBOARD
     )
 
 async def adopt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
-    user = get_user(u.id, u.first_name)
+    user = get_user(u.id, u.username or u.first_name)
     if user["balance"] < 50:
-        await update.message.reply_text(f"😿 برای گربه گرفتن به *۵۰ میوپوینت* نیاز داری!\nموجودی فعلی: {user['balance']} میوپوینت", parse_mode="Markdown", reply_markup=KEYBOARD)
+        await update.message.reply_text(
+            f"😿 برای گربه گرفتن به *۵۰ میوپوینت* نیاز داری!\nموجودی فعلی: {user['balance']} میوپوینت",
+            parse_mode="Markdown",
+            reply_markup=KEYBOARD
+        )
         return
     cats = ["😸","🐱","😺","😻","🐈","🐈‍⬛"]
     names = ["پیشی","گربولو","میومیو","خرناس","نازگل","شیطون","پنجول","ابری"]
@@ -157,7 +170,8 @@ async def adopt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     add_cat(u.id)
     await update.message.reply_text(
         f"🎉 *تبریک! گربه جدیدت اومد!*\n\n{cat} نام: *{name}*\n⭐ سطح: ۱\n❤️ خوشحالی: ۱۰۰٪\n\n🪙 ۵۰ میوپوینت کم شد\nموجودی: {user['balance'] - 50} میوپوینت",
-        parse_mode="Markdown", reply_markup=KEYBOARD
+        parse_mode="Markdown",
+        reply_markup=KEYBOARD
     )
 
 async def shop(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -169,7 +183,8 @@ async def shop(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "🎀 ریبون صورتی — 15 میوپوینت\n"
         "🏡 خانه گربه‌ای — 200 میوپوینت\n"
         "👑 تاج میومیو — 500 میوپوینت",
-        parse_mode="Markdown", reply_markup=KEYBOARD
+        parse_mode="Markdown",
+        reply_markup=KEYBOARD
     )
 
 async def top(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -194,10 +209,16 @@ async def purr(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def help_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "❓ *راهنمای بانک‌میو*\n\n"
-        "/start — شروع\n/balance — موجودی\n/daily — جایزه روزانه\n"
-        "/transfer — انتقال\n/adopt — گربه بگیر\n/shop — فروشگاه\n"
-        "/top — جدول برترین‌ها\n/purr — شاید بونوس بگیری 😸",
-        parse_mode="Markdown", reply_markup=KEYBOARD
+        "/start — شروع و دریافت ۱۰۰ میوپوینت\n"
+        "/balance — مشاهده موجودی\n"
+        "/daily — جایزه روزانه\n"
+        "/transfer — انتقال به دیگران\n"
+        "/adopt — گربه بگیر\n"
+        "/shop — فروشگاه\n"
+        "/top — جدول برترین‌ها\n"
+        "/purr — شاید بونوس بگیری 😸",
+        parse_mode="Markdown",
+        reply_markup=KEYBOARD
     )
 
 async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
