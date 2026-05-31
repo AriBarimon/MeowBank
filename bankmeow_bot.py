@@ -4,13 +4,12 @@ import sqlite3
 from datetime import date
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler,
+    Application, CommandHandler, MessageHandler,
     filters, ContextTypes
 )
 
-TOKEN = os.environ.get("BOT_TOKEN", "اینجا_توکنت_رو_بذار")
+TOKEN = os.environ.get("BOT_TOKEN", "")
 
-# ─── دیتابیس ───────────────────────────────────────────
 def get_db():
     conn = sqlite3.connect("bankmeow.db")
     conn.execute("""
@@ -59,14 +58,12 @@ def get_top():
     conn.close()
     return rows
 
-# ─── کیبورد ثابت ───────────────────────────────────────
 KEYBOARD = ReplyKeyboardMarkup([
     ["💰 موجودی", "🎁 جایزه روزانه"],
     ["🐱 گربه بگیر", "🏆 جدول برترین‌ها"],
     ["🛍️ فروشگاه", "❓ راهنما"],
 ], resize_keyboard=True)
 
-# ─── دستورات ───────────────────────────────────────────
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     get_user(u.id, u.username or u.first_name)
@@ -96,10 +93,7 @@ async def daily(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user = get_user(u.id, u.username or u.first_name)
     today = str(date.today())
     if user["last_daily"] == today:
-        await update.message.reply_text(
-            "⏳ جایزه روزانه‌ات رو قبلاً گرفتی!\nفردا دوباره بیا 😸",
-            reply_markup=KEYBOARD
-        )
+        await update.message.reply_text("⏳ جایزه روزانه‌ات رو قبلاً گرفتی!\nفردا دوباره بیا 😸", reply_markup=KEYBOARD)
         return
     amount = random.randint(10, 50)
     update_balance(u.id, amount)
@@ -108,8 +102,7 @@ async def daily(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"🎉 *جایزه روزانه دریافت شد!*\n\n"
         f"🪙 *+{amount} میوپوینت* به حسابت اضافه شد!\n"
-        f"موجودی جدید: *{new_bal} میوپوینت*\n\n"
-        f"فردا دوباره بیا 😺",
+        f"موجودی جدید: *{new_bal} میوپوینت*\n\nفردا دوباره بیا 😺",
         parse_mode="Markdown",
         reply_markup=KEYBOARD
     )
@@ -120,12 +113,8 @@ async def transfer(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     args = ctx.args
     if len(args) < 2:
         await update.message.reply_text(
-            "📤 *نحوه انتقال:*\n\n"
-            "`/transfer @username مقدار`\n\n"
-            "مثال:\n`/transfer @GorbehKhan 50`\n\n"
-            "💡 کارمزد انتقال: ۲ میوپوینت",
-            parse_mode="Markdown",
-            reply_markup=KEYBOARD
+            "📤 *نحوه انتقال:*\n\n`/transfer @username مقدار`\n\nمثال:\n`/transfer @GorbehKhan 50`",
+            parse_mode="Markdown", reply_markup=KEYBOARD
         )
         return
     target_username = args[0].replace("@", "")
@@ -139,12 +128,7 @@ async def transfer(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
     total = amount + 2
     if user["balance"] < total:
-        await update.message.reply_text(
-            f"😿 موجودیت کافی نیست!\n"
-            f"نیاز داری: {total} میوپوینت (شامل ۲ کارمزد)\n"
-            f"موجودی فعلی: {user['balance']} میوپوینت",
-            reply_markup=KEYBOARD
-        )
+        await update.message.reply_text(f"😿 موجودیت کافی نیست!\nنیاز داری: {total} میوپوینت\nموجودی فعلی: {user['balance']} میوپوینت", reply_markup=KEYBOARD)
         return
     conn = get_db()
     target = conn.execute("SELECT * FROM users WHERE username=?", (target_username,)).fetchone()
@@ -155,25 +139,15 @@ async def transfer(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     update_balance(u.id, -total)
     update_balance(target[0], amount)
     await update.message.reply_text(
-        f"✅ *انتقال موفق!*\n\n"
-        f"📤 {amount} میوپوینت به @{target_username} فرستادی\n"
-        f"💸 کارمزد: ۲ میوپوینت\n"
-        f"موجودی جدید: {user['balance'] - total} میوپوینت",
-        parse_mode="Markdown",
-        reply_markup=KEYBOARD
+        f"✅ *انتقال موفق!*\n\n📤 {amount} میوپوینت به @{target_username} فرستادی\nموجودی جدید: {user['balance'] - total} میوپوینت",
+        parse_mode="Markdown", reply_markup=KEYBOARD
     )
 
 async def adopt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     user = get_user(u.id, u.username or u.first_name)
     if user["balance"] < 50:
-        await update.message.reply_text(
-            f"😿 برای گربه گرفتن به *۵۰ میوپوینت* نیاز داری!\n"
-            f"موجودی فعلی: {user['balance']} میوپوینت\n\n"
-            f"جایزه روزانه‌ات رو بگیر! 🎁",
-            parse_mode="Markdown",
-            reply_markup=KEYBOARD
-        )
+        await update.message.reply_text(f"😿 برای گربه گرفتن به *۵۰ میوپوینت* نیاز داری!\nموجودی فعلی: {user['balance']} میوپوینت", parse_mode="Markdown", reply_markup=KEYBOARD)
         return
     cats = ["😸","🐱","😺","😻","🐈","🐈‍⬛"]
     names = ["پیشی","گربولو","میومیو","خرناس","نازگل","شیطون","پنجول","ابری"]
@@ -182,15 +156,8 @@ async def adopt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     update_balance(u.id, -50)
     add_cat(u.id)
     await update.message.reply_text(
-        f"🎉 *تبریک! گربه جدیدت اومد!*\n\n"
-        f"{cat} نام: *{name}*\n"
-        f"⭐ سطح: ۱ (تازه‌کار)\n"
-        f"❤️ خوشحالی: ۱۰۰٪\n\n"
-        f"🪙 ۵۰ میوپوینت کم شد\n"
-        f"موجودی: {user['balance'] - 50} میوپوینت\n\n"
-        f"از گربه‌ات نگهداری کن! 💕",
-        parse_mode="Markdown",
-        reply_markup=KEYBOARD
+        f"🎉 *تبریک! گربه جدیدت اومد!*\n\n{cat} نام: *{name}*\n⭐ سطح: ۱\n❤️ خوشحالی: ۱۰۰٪\n\n🪙 ۵۰ میوپوینت کم شد\nموجودی: {user['balance'] - 50} میوپوینت",
+        parse_mode="Markdown", reply_markup=KEYBOARD
     )
 
 async def shop(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -201,10 +168,8 @@ async def shop(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "🛏️ تخت ابری — 80 میوپوینت\n"
         "🎀 ریبون صورتی — 15 میوپوینت\n"
         "🏡 خانه گربه‌ای — 200 میوپوینت\n"
-        "👑 تاج میومیو — 500 میوپوینت\n\n"
-        "برای خرید: `/buy نام_آیتم`",
-        parse_mode="Markdown",
-        reply_markup=KEYBOARD
+        "👑 تاج میومیو — 500 میوپوینت",
+        parse_mode="Markdown", reply_markup=KEYBOARD
     )
 
 async def top(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -222,32 +187,17 @@ async def purr(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     bonus = random.randint(1, 6) if random.random() > 0.4 else 0
     if bonus:
         update_balance(u.id, bonus)
-        await update.message.reply_text(
-            f"😸 پوررر! چه صدای قشنگی!\n🪙 +{bonus} میوپوینت بونوس گرفتی! 🐾",
-            reply_markup=KEYBOARD
-        )
+        await update.message.reply_text(f"😸 پوررر! چه صدای قشنگی!\n🪙 +{bonus} میوپوینت بونوس! 🐾", reply_markup=KEYBOARD)
     else:
-        await update.message.reply_text(
-            "😺 میوووو! عالیه!\nبار بعدی شاید بونوس بگیری 🍀",
-            reply_markup=KEYBOARD
-        )
+        await update.message.reply_text("😺 میوووو! عالیه!\nبار بعدی شاید بونوس بگیری 🍀", reply_markup=KEYBOARD)
 
 async def help_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "❓ *راهنمای بانک‌میو*\n\n"
-        "🪙 *میوپوینت* پول رسمی گربه‌هاست!\n\n"
-        "📌 *دستورات:*\n"
-        "/start — شروع و دریافت ۱۰۰ میوپوینت\n"
-        "/balance — مشاهده موجودی\n"
-        "/daily — جایزه روزانه (10-50 میوپوینت)\n"
-        "/transfer — انتقال به دیگران\n"
-        "/adopt — گربه بگیر (50 میوپوینت)\n"
-        "/shop — فروشگاه آیتم‌ها\n"
-        "/top — جدول برترین‌ها\n"
-        "/purr — شاید بونوس بگیری 😸\n\n"
-        "🎯 *هدف:* میوپوینت جمع کن و به صدر برس! 🏆",
-        parse_mode="Markdown",
-        reply_markup=KEYBOARD
+        "/start — شروع\n/balance — موجودی\n/daily — جایزه روزانه\n"
+        "/transfer — انتقال\n/adopt — گربه بگیر\n/shop — فروشگاه\n"
+        "/top — جدول برترین‌ها\n/purr — شاید بونوس بگیری 😸",
+        parse_mode="Markdown", reply_markup=KEYBOARD
     )
 
 async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -265,14 +215,10 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     elif "راهنما" in text:
         await help_cmd(update, ctx)
     else:
-        await update.message.reply_text(
-            "😸 این دستور رو نمی‌شناسم!\n/help بزن یا از دکمه‌ها استفاده کن.",
-            reply_markup=KEYBOARD
-        )
+        await update.message.reply_text("😸 این دستور رو نمی‌شناسم!\n/help بزن یا از دکمه‌ها استفاده کن.", reply_markup=KEYBOARD)
 
-# ─── اجرا ──────────────────────────────────────────────
 def main():
-    app = ApplicationBuilder().token(TOKEN).build()
+    app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("balance", balance))
     app.add_handler(CommandHandler("daily", daily))
