@@ -38,7 +38,7 @@ KEYBOARD = ReplyKeyboardMarkup([
     ["💰 موجودی", "🎁 جایزه"],
     ["🐱 گربه بگیر", "📋 گربه‌هام"],
     ["🛍️ فروشگاه", "😸 پورر"],
-    ["🥚 تخم‌مرغ", "🏆 برترین‌ها"],
+    ["🐭 موش‌بگیر", "🏆 برترین‌ها"],
     ["📊 آمار من", "❓ راهنما"],
 ], resize_keyboard=True)
 
@@ -255,7 +255,7 @@ async def egg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user = get_user(u.id, u.first_name)
     ok, remaining = check_cooldown(user["last_egg"], 24)
     if not ok:
-        await update.message.reply_text(f"🥚 تخم‌مرغ امروزت رو قبلاً باز کردی!\n⏳ {remaining[0]} ساعت و {remaining[1]} دقیقه دیگه برگرد", reply_markup=KEYBOARD)
+        await update.message.reply_text(f"🐭 موش‌بگیر امروزت رو قبلاً باز کردی!\n⏳ {remaining[0]} ساعت و {remaining[1]} دقیقه دیگه برگرد", reply_markup=KEYBOARD)
         return
 
     set_time(u.id, "last_egg")
@@ -372,7 +372,7 @@ async def stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"🏅 رتبه: #{rank}\n"
         f"🎁 جایزه بعدی: {time_text(user['last_daily'], 12)}\n"
         f"😸 پورر بعدی: {time_text(user['last_purr'], 3)}\n"
-        f"🥚 تخم‌مرغ بعدی: {time_text(user['last_egg'], 24)}",
+        f"🐭 موش‌بگیر بعدی: {time_text(user['last_egg'], 24)}",
         parse_mode="Markdown", reply_markup=KEYBOARD
     )
 
@@ -440,7 +440,7 @@ async def help_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "❓ *راهنمای بانک‌میو*\n\n"
         "💰 موجودی — کیف پولت\n"
         "🎁 جایزه — هر ۱۲ ساعت\n"
-        "🥚 تخم‌مرغ — هر ۲۴ ساعت\n"
+        "🐭 موش‌بگیر — هر ۲۴ ساعت\n"
         "🐱 گربه بگیر — با ۵۰ میوپوینت\n"
         "📋 گربه‌هام — لیست گربه‌هات\n"
         "🛍️ فروشگاه — خرید لوازم\n"
@@ -535,7 +535,7 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await shop(update, ctx)
     elif "پورر" in text:
         await purr(update, ctx)
-    elif "تخم" in text:
+    elif "موش" in text:
         await egg(update, ctx)
     elif "برترین" in text:
         await top(update, ctx)
@@ -568,3 +568,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
