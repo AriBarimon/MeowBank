@@ -265,7 +265,7 @@ async def egg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         amount = random.randint(50, 100)
         update_balance(u.id, amount)
         await update.message.reply_text(
-            f"🥚 *تخم‌مرغت باز شد!*\n\n"
+            f"🥚 *موش کوچولو !*\n\n"
             f"🪙 *+{amount} میوپوینت* پیدا کردی!\n"
             f"موجودی جدید: {user['balance'] + amount} میوپوینت",
             parse_mode="Markdown", reply_markup=KEYBOARD
@@ -274,7 +274,7 @@ async def egg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         amount = random.randint(100, 200)
         update_balance(u.id, amount)
         await update.message.reply_text(
-            f"🥚✨ *تخم‌مرغ طلایی!*\n\n"
+            f"🥚✨ *موش فاضلاب !*\n\n"
             f"🪙 *+{amount} میوپوینت* پیدا کردی!\n"
             f"موجودی جدید: {user['balance'] + amount} میوپوینت",
             parse_mode="Markdown", reply_markup=KEYBOARD
@@ -284,7 +284,7 @@ async def egg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         name = random.choice(CAT_NAMES)
         add_cat_db(u.id, name, emoji, "normal")
         await update.message.reply_text(
-            f"🥚🐱 *یه گربه از تخم‌مرغ در اومد!*\n\n"
+            f"🐱 *یه گربه از تخم‌مرغ در اومد!*\n\n"
             f"{emoji} *{name}* به خانواده‌ات اضافه شد!\n"
             f"❤️ خوشحالی: ۱۰۰٪",
             parse_mode="Markdown", reply_markup=KEYBOARD
@@ -294,7 +294,7 @@ async def egg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         name = random.choice(RARE_CAT_NAMES)
         add_cat_db(u.id, name, emoji, "rare")
         await update.message.reply_text(
-            f"🥚✨ *گربه نادر پیدا کردی!*\n\n"
+            f"✨ *گربه نادر پیدا کردی!*\n\n"
             f"{emoji} *{name}* — نادر\n"
             f"❤️ خوشحالی: ۱۰۰٪\n\n"
             f"خوش‌شانسی! 🍀",
