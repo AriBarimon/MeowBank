@@ -2,14 +2,50 @@ import os
 import random
 import sqlite3
 from datetime import date, datetime, timedelta
-from telegram import Update, ReplyKeyboardMarkup
+from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler,
-    filters, ContextTypes
+    CallbackQueryHandler, filters, ContextTypes
 )
 
 TOKEN = os.environ.get("BOT_TOKEN", "")
 ADMIN_ID = 1026211406
+
+CAT_NAMES = [
+    "پیشی", "گربولو", "میومیو", "خرناس", "نازگل", "شیطون", "پنجول", "ابری",
+    "دمبی", "مشکی", "برفی", "زردک", "پیسی", "کرمی", "طوسی", "خالدار",
+    "ناز", "گنده", "چاقو", "لوسی", "رامبو", "ببری", "پلنگی", "گلی",
+    "شبنم", "آبنبات", "توپی", "موشی", "ملوس", "کوچولو"
+]
+
+CAT_EMOJIS = ["😸","🐱","😺","😻","🐈","🐈‍⬛","🙀","😹"]
+
+SHOP_ITEMS = {
+    "ماهی":  {"price": 20,  "emoji": "🐟", "happiness": 15},
+    "توپ":   {"price": 30,  "emoji": "🎯", "happiness": 20},
+    "تخت":   {"price": 80,  "emoji": "🛏️", "happiness": 30},
+    "ریبون": {"price": 15,  "emoji": "🎀", "happiness": 10},
+    "خانه":  {"price": 200, "emoji": "🏡", "happiness": 50},
+    "تاج":   {"price": 500, "emoji": "👑", "happiness": 80},
+}
+
+KEYBOARD = ReplyKeyboardMarkup([
+    ["💰 موجودی", "🎁 جایزه"],
+    ["🐱 گربه بگیر", "📋 گربه‌هام"],
+    ["🛍️ فروشگاه", "😸 پورر"],
+    ["🏆 برترین‌ها", "📊 آمار من"],
+    ["❓ راهنما"],
+], resize_keyboard=True)
+
+def shop_keyboard():
+    buttons = []
+    for name, item in SHOP_ITEMS.items():
+        buttons.append([InlineKeyboardButton(
+            f"{item['emoji']} {name} — {item['price']} میوپوینت",
+            callback_data=f"buy_{name}"
+        )])
+    buttons.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
+    return InlineKeyboardMarkup(buttons)
 
 def get_db():
     conn = sqlite3.connect("bankmeow.db")
@@ -33,7 +69,6 @@ def get_db():
             last_update TEXT DEFAULT ''
         )
     """)
-    # اضافه کردن ستون last_purr اگه وجود نداشت
     try:
         conn.execute("ALTER TABLE users ADD COLUMN last_purr TEXT DEFAULT ''")
         conn.commit()
@@ -64,7 +99,7 @@ def update_balance(user_id, amount):
 
 def set_daily(user_id):
     conn = get_db()
-    conn.execute("UPDATE users SET last_daily=? WHERE user_id=?", (str(date.today()), user_id))
+    conn.execute("UPDATE users SET last_daily=? WHERE user_id=?", (datetime.now().isoformat(), user_id))
     conn.commit()
     conn.close()
 
@@ -84,16 +119,15 @@ def add_cat_db(user_id, name, emoji):
 
 def get_user_cats(user_id):
     conn = get_db()
-    # کم کردن خوشحالی بر اساس زمان
     cats = conn.execute("SELECT id, name, emoji, happiness, last_update FROM cats WHERE user_id=?", (user_id,)).fetchall()
-    updated_cats = []
+    updated = []
     for cat in cats:
         cat_id, name, emoji, happiness, last_update = cat
         if last_update:
             try:
                 last_dt = datetime.fromisoformat(last_update)
-                hours_passed = (datetime.now() - last_dt).total_seconds() / 3600
-                decrease = int(hours_passed / 24 * 10)
+                hours = (datetime.now() - last_dt).total_seconds() / 3600
+                decrease = int(hours / 24 * 20)
                 new_happiness = max(0, happiness - decrease)
                 if new_happiness != happiness:
                     conn.execute("UPDATE cats SET happiness=?, last_update=? WHERE id=?",
@@ -101,17 +135,18 @@ def get_user_cats(user_id):
                 happiness = new_happiness
             except:
                 pass
-        updated_cats.append({"id": cat_id, "name": name, "emoji": emoji, "happiness": happiness})
+        updated.append({"id": cat_id, "name": name, "emoji": emoji, "happiness": happiness})
     conn.commit()
     conn.close()
-    return updated_cats
+    return updated
 
 def add_happiness(user_id, amount):
     conn = get_db()
     cats = conn.execute("SELECT id, happiness FROM cats WHERE user_id=?", (user_id,)).fetchall()
     for cat in cats:
-        new_happiness = min(100, cat[1] + amount)
-        conn.execute("UPDATE cats SET happiness=? WHERE id=?", (new_happiness, cat[0]))
+        new_h = min(100, cat[1] + amount)
+        conn.execute("UPDATE cats SET happiness=?, last_update=? WHERE id=?",
+                     (new_h, datetime.now().isoformat(), cat[0]))
     conn.commit()
     conn.close()
     return len(cats)
@@ -122,26 +157,20 @@ def get_top():
     conn.close()
     return rows
 
-KEYBOARD = ReplyKeyboardMarkup([
-    ["💰 موجودی", "🎁 جایزه روزانه"],
-    ["🐱 گربه بگیر", "🏆 جدول برترین‌ها"],
-    ["🛍️ فروشگاه", "❓ راهنما"],
-], resize_keyboard=True)
-
-SHOP_ITEMS = {
-    "ماهی":  {"price": 20,  "emoji": "🐟", "happiness": 15},
-    "توپ":   {"price": 30,  "emoji": "🎯", "happiness": 20},
-    "تخت":   {"price": 80,  "emoji": "🛏️", "happiness": 30},
-    "ریبون": {"price": 15,  "emoji": "🎀", "happiness": 10},
-    "خانه":  {"price": 200, "emoji": "🏡", "happiness": 50},
-    "تاج":   {"price": 500, "emoji": "👑", "happiness": 80},
-}
+def get_rank(user_id):
+    conn = get_db()
+    rows = conn.execute("SELECT user_id FROM users ORDER BY balance DESC").fetchall()
+    conn.close()
+    for i, row in enumerate(rows):
+        if row[0] == user_id:
+            return i + 1
+    return "-"
 
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     get_user(u.id, u.first_name)
     await update.message.reply_text(
-        f"🐱 سلام {u.first_name}! خوش اومدی به *بانک‌میو*!\n\n"
+        f"🐱 سلام *{u.first_name}*! خوش اومدی به *بانک‌میو*!\n\n"
         "🪙 واحد پولی ما *میوپوینت* هست!\n"
         "با ۱۰۰ میوپوینت شروع کردی 🎉\n\n"
         "از دکمه‌های پایین استفاده کن 👇",
@@ -152,37 +181,49 @@ async def balance(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     user = get_user(u.id, u.first_name)
     await update.message.reply_text(
-        f"💰 *کیف پول میوپوینت*\n\n"
+        f"💰 *کیف پول {u.first_name}*\n\n"
         f"🪙 موجودی: *{user['balance']} میوپوینت*\n"
         f"🐱 گربه‌ها: {user['cats']} عدد\n\n"
-        f"{'💡 جایزه روزانه‌ات رو بگیر! 🎁' if user['balance'] < 50 else '😸 آفرین! داری پیشرفت می‌کنی!'}",
+        f"{'💡 جایزه‌ات رو بگیر! 🎁' if user['balance'] < 50 else '😸 آفرین! داری پیشرفت می‌کنی!'}",
         parse_mode="Markdown", reply_markup=KEYBOARD
     )
 
 async def daily(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     user = get_user(u.id, u.first_name)
-    if user["last_daily"] == str(date.today()):
-        await update.message.reply_text("⏳ جایزه روزانه‌ات رو قبلاً گرفتی!\nفردا دوباره بیا 😸", reply_markup=KEYBOARD)
-        return
+    if user["last_daily"]:
+        try:
+            last_dt = datetime.fromisoformat(user["last_daily"])
+            diff = datetime.now() - last_dt
+            if diff < timedelta(hours=12):
+                remaining = timedelta(hours=12) - diff
+                hours = int(remaining.total_seconds() // 3600)
+                mins = int((remaining.total_seconds() % 3600) // 60)
+                await update.message.reply_text(
+                    f"⏳ جایزه‌ات رو قبلاً گرفتی!\n{hours} ساعت و {mins} دقیقه دیگه برگرد 😸",
+                    reply_markup=KEYBOARD
+                )
+                return
+        except:
+            pass
     amount = random.randint(10, 50)
     update_balance(u.id, amount)
     set_daily(u.id)
     await update.message.reply_text(
-        f"🎉 *جایزه روزانه دریافت شد!*\n\n"
+        f"🎉 *جایزه دریافت شد!*\n\n"
         f"🪙 *+{amount} میوپوینت* به حسابت اضافه شد!\n"
-        f"موجودی جدید: *{user['balance'] + amount} میوپوینت*\n\nفردا دوباره بیا 😺",
+        f"موجودی جدید: *{user['balance'] + amount} میوپوینت*\n\n"
+        f"هر ۱۲ ساعت میتونی جایزه بگیری 😺",
         parse_mode="Markdown", reply_markup=KEYBOARD
     )
 
 async def purr(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     user = get_user(u.id, u.first_name)
-    # چک کردن ۶ ساعت
     if user["last_purr"]:
         try:
-            last_purr_dt = datetime.fromisoformat(user["last_purr"])
-            diff = datetime.now() - last_purr_dt
+            last_dt = datetime.fromisoformat(user["last_purr"])
+            diff = datetime.now() - last_dt
             if diff < timedelta(hours=6):
                 remaining = timedelta(hours=6) - diff
                 hours = int(remaining.total_seconds() // 3600)
@@ -195,12 +236,12 @@ async def purr(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         except:
             pass
     bonus = random.randint(1, 6) if random.random() > 0.4 else 0
+    set_purr(u.id)
     if bonus:
         update_balance(u.id, bonus)
         await update.message.reply_text(f"😸 پوررر! چه صدای قشنگی!\n🪙 +{bonus} میوپوینت بونوس! 🐾", reply_markup=KEYBOARD)
     else:
         await update.message.reply_text("😺 میوووو! عالیه!\nبار بعدی شاید بونوس بگیری 🍀", reply_markup=KEYBOARD)
-    set_purr(u.id)
 
 async def adopt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
@@ -211,17 +252,17 @@ async def adopt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown", reply_markup=KEYBOARD
         )
         return
-    cat_emojis = ["😸","🐱","😺","😻","🐈","🐈‍⬛"]
-    names = ["پیشی","گربولو","میومیو","خرناس","نازگل","شیطون","پنجول","ابری"]
-    emoji = random.choice(cat_emojis)
-    name = random.choice(names)
+    emoji = random.choice(CAT_EMOJIS)
+    name = random.choice(CAT_NAMES)
     update_balance(u.id, -50)
     add_cat_db(u.id, name, emoji)
     await update.message.reply_text(
-        f"🎉 *تبریک! گربه جدیدت اومد!*\n\n{emoji} نام: *{name}*\n"
-        f"⭐ سطح: ۱\n❤️ خوشحالی: ۱۰۰٪\n\n"
-        f"🪙 ۵۰ میوپوینت کم شد\nموجودی: {user['balance'] - 50} میوپوینت\n\n"
-        f"از گربه‌ات نگهداری کن! با /mycats ببینشون 🐾",
+        f"🎉 *تبریک! گربه جدیدت اومد!*\n\n"
+        f"{emoji} نام: *{name}*\n"
+        f"❤️ خوشحالی: ۱۰۰٪\n\n"
+        f"🪙 ۵۰ میوپوینت کم شد\n"
+        f"موجودی: {user['balance'] - 50} میوپوینت\n\n"
+        f"با 📋 گربه‌هام ببینشون!",
         parse_mode="Markdown", reply_markup=KEYBOARD
     )
 
@@ -229,48 +270,105 @@ async def mycats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     cats = get_user_cats(u.id)
     if not cats:
-        await update.message.reply_text("😿 هنوز گربه‌ای نداری!\nبا دکمه 🐱 گربه بگیر یه گربه بخر.", reply_markup=KEYBOARD)
+        await update.message.reply_text(
+            "😿 هنوز گربه‌ای نداری!\nبا دکمه 🐱 گربه بگیر یه گربه بخر.",
+            reply_markup=KEYBOARD
+        )
         return
-    text = "🐱 *گربه‌های تو:*\n\n"
+    text = f"📋 *گربه‌های {u.first_name}:*\n\n"
     for cat in cats:
-        bar = "❤️" * (cat['happiness'] // 20) + "🖤" * (5 - cat['happiness'] // 20)
-        text += f"{cat['emoji']} *{cat['name']}*\n{bar} {cat['happiness']}٪\n\n"
-    text += "💡 با خرید از فروشگاه خوشحالیشون رو بالا ببر!"
+        filled = cat['happiness'] // 20
+        bar = "❤️" * filled + "🖤" * (5 - filled)
+        text += f"{cat['emoji']} *{cat['name']}* — {bar} {cat['happiness']}٪\n"
+    text += "\n💡 از فروشگاه خرید کن تا خوشحالیشون بره بالا!"
     await update.message.reply_text(text, parse_mode="Markdown", reply_markup=KEYBOARD)
 
 async def shop(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🛍️ *فروشگاه بانک‌میو*\n\n"
-        "🐟 ماهی طلایی — 20 میوپوینت — /buy ماهی\n"
-        "🎯 توپ موشی — 30 میوپوینت — /buy توپ\n"
-        "🛏️ تخت ابری — 80 میوپوینت — /buy تخت\n"
-        "🎀 ریبون صورتی — 15 میوپوینت — /buy ریبون\n"
-        "🏡 خانه گربه‌ای — 200 میوپوینت — /buy خانه\n"
-        "👑 تاج میومیو — 500 میوپوینت — /buy تاج\n\n"
-        "💡 هر آیتم خوشحالی گربه‌هات رو بالا میبره!",
-        parse_mode="Markdown", reply_markup=KEYBOARD
+        "هر آیتم خوشحالی گربه‌هات رو بالا میبره!\n"
+        "یه آیتم انتخاب کن 👇",
+        parse_mode="Markdown",
+        reply_markup=shop_keyboard()
     )
 
-async def buy(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+async def shop_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    u = query.from_user
+
+    if query.data == "back":
+        await query.message.reply_text("به منوی اصلی برگشتی 😸", reply_markup=KEYBOARD)
+        await query.message.delete()
+        return
+
+    if query.data.startswith("buy_"):
+        item_name = query.data.replace("buy_", "")
+        user = get_user(u.id, u.first_name)
+        if item_name not in SHOP_ITEMS:
+            await query.message.reply_text("😿 آیتم پیدا نشد!", reply_markup=KEYBOARD)
+            return
+        item = SHOP_ITEMS[item_name]
+        if user["balance"] < item["price"]:
+            await query.edit_message_text(
+                f"😿 موجودیت کافی نیست!\n"
+                f"قیمت: {item['price']} میوپوینت\n"
+                f"موجودی فعلی: {user['balance']} میوپوینت",
+                reply_markup=shop_keyboard()
+            )
+            return
+        update_balance(u.id, -item["price"])
+        cat_count = add_happiness(u.id, item["happiness"])
+        msg = (
+            f"✅ *خرید موفق!*\n\n"
+            f"{item['emoji']} *{item_name}* رو خریدی!\n"
+            f"🪙 {item['price']} میوپوینت کم شد\n"
+            f"موجودی جدید: {user['balance'] - item['price']} میوپوینت"
+        )
+        if cat_count > 0:
+            msg += f"\n\n😸 خوشحالی {cat_count} گربه‌ات +{item['happiness']} شد!"
+        await query.edit_message_text(msg, parse_mode="Markdown", reply_markup=shop_keyboard())
+
+async def stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     user = get_user(u.id, u.first_name)
-    if not ctx.args:
-        await update.message.reply_text("برای خرید بنویس:\n`/buy نام_آیتم`\n\nمثال: `/buy ماهی`", parse_mode="Markdown", reply_markup=KEYBOARD)
-        return
-    item_name = ctx.args[0]
-    if item_name not in SHOP_ITEMS:
-        await update.message.reply_text("😿 آیتم پیدا نشد!\n\nآیتم‌های موجود:\nماهی، توپ، تخت، ریبون، خانه، تاج", reply_markup=KEYBOARD)
-        return
-    item = SHOP_ITEMS[item_name]
-    if user["balance"] < item["price"]:
-        await update.message.reply_text(f"😿 موجودیت کافی نیست!\nقیمت: {item['price']} میوپوینت\nموجودی فعلی: {user['balance']} میوپوینت", reply_markup=KEYBOARD)
-        return
-    update_balance(u.id, -item["price"])
-    cat_count = add_happiness(u.id, item["happiness"])
-    msg = f"✅ *خرید موفق!*\n\n{item['emoji']} *{item_name}* رو خریدی!\n🪙 {item['price']} میوپوینت کم شد\nموجودی جدید: {user['balance'] - item['price']} میوپوینت"
-    if cat_count > 0:
-        msg += f"\n\n😸 خوشحالی {cat_count} گربه‌ات +{item['happiness']} شد!"
-    await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=KEYBOARD)
+    rank = get_rank(u.id)
+
+    daily_text = "✅ آماده"
+    if user["last_daily"]:
+        try:
+            last_dt = datetime.fromisoformat(user["last_daily"])
+            diff = datetime.now() - last_dt
+            if diff < timedelta(hours=12):
+                remaining = timedelta(hours=12) - diff
+                h = int(remaining.total_seconds() // 3600)
+                m = int((remaining.total_seconds() % 3600) // 60)
+                daily_text = f"⏳ {h}ساعت {m}دقیقه دیگه"
+        except:
+            pass
+
+    purr_text = "✅ آماده"
+    if user["last_purr"]:
+        try:
+            last_dt = datetime.fromisoformat(user["last_purr"])
+            diff = datetime.now() - last_dt
+            if diff < timedelta(hours=6):
+                remaining = timedelta(hours=6) - diff
+                h = int(remaining.total_seconds() // 3600)
+                m = int((remaining.total_seconds() % 3600) // 60)
+                purr_text = f"⏳ {h}ساعت {m}دقیقه دیگه"
+        except:
+            pass
+
+    await update.message.reply_text(
+        f"📊 *آمار {u.first_name}*\n\n"
+        f"🪙 موجودی: *{user['balance']} میوپوینت*\n"
+        f"🐱 گربه‌ها: {user['cats']} عدد\n"
+        f"🏅 رتبه: #{rank}\n"
+        f"🎁 جایزه بعدی: {daily_text}\n"
+        f"😸 پورر بعدی: {purr_text}",
+        parse_mode="Markdown", reply_markup=KEYBOARD
+    )
 
 async def top(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     rows = get_top()
@@ -300,7 +398,7 @@ async def transfer(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
     total = amount + 2
     if user["balance"] < total:
-        await update.message.reply_text(f"😿 موجودیت کافی نیست!\nنیاز داری: {total} میوپوینت\nموجودی فعلی: {user['balance']} میوپوینت", reply_markup=KEYBOARD)
+        await update.message.reply_text(f"😿 موجودیت کافی نیست!\nنیاز داری: {total} میوپوینت\nموجودی: {user['balance']} میوپوینت", reply_markup=KEYBOARD)
         return
     conn = get_db()
     target = conn.execute("SELECT * FROM users WHERE first_name=?", (target_name,)).fetchone()
@@ -318,33 +416,31 @@ async def transfer(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def addmeow(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     if u.id != ADMIN_ID:
-        await update.message.reply_text("😾 دسترسی نداری!", reply_markup=KEYBOARD)
         return
     if not ctx.args:
-        await update.message.reply_text("بنویس: `/addmeow مقدار`", parse_mode="Markdown", reply_markup=KEYBOARD)
+        await update.message.reply_text("بنویس: `/addmeow مقدار`", parse_mode="Markdown")
         return
     try:
         amount = int(ctx.args[0])
     except:
-        await update.message.reply_text("❌ مقدار باید عدد باشه!", reply_markup=KEYBOARD)
+        await update.message.reply_text("❌ مقدار باید عدد باشه!")
         return
     update_balance(u.id, amount)
     user = get_user(u.id, u.first_name)
-    await update.message.reply_text(f"👑 *ادمین:* +{amount} میوپوینت اضافه شد!\nموجودی جدید: {user['balance']} میوپوینت 😸", parse_mode="Markdown", reply_markup=KEYBOARD)
+    await update.message.reply_text(f"👑 +{amount} میوپوینت اضافه شد!\nموجودی: {user['balance']} میوپوینت 😸", reply_markup=KEYBOARD)
 
 async def help_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "❓ *راهنمای بانک‌میو*\n\n"
-        "/start — شروع\n"
-        "/balance — موجودی\n"
-        "/daily — جایزه روزانه\n"
-        "/purr — بونوس (هر ۶ ساعت)\n"
-        "/transfer — انتقال میوپوینت\n"
-        "/adopt — گربه بگیر\n"
-        "/mycats — لیست گربه‌هات\n"
-        "/shop — فروشگاه\n"
-        "/buy — خرید از فروشگاه\n"
-        "/top — سه برتر 🏆",
+        "💰 موجودی — کیف پولت\n"
+        "🎁 جایزه — هر ۱۲ ساعت\n"
+        "🐱 گربه بگیر — با ۵۰ میوپوینت\n"
+        "📋 گربه‌هام — لیست گربه‌هات\n"
+        "🛍️ فروشگاه — خرید لوازم\n"
+        "😸 پورر — بونوس هر ۶ ساعت\n"
+        "🏆 برترین‌ها — سه نفر اول\n"
+        "📊 آمار من — وضعیت کامل\n\n"
+        "📤 `/transfer اسم مقدار` — انتقال میوپوینت",
         parse_mode="Markdown", reply_markup=KEYBOARD
     )
 
@@ -354,16 +450,22 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await balance(update, ctx)
     elif "جایزه" in text:
         await daily(update, ctx)
-    elif "گربه" in text:
+    elif "گربه بگیر" in text:
         await adopt(update, ctx)
-    elif "جدول" in text or "برترین" in text:
-        await top(update, ctx)
+    elif "گربه‌هام" in text or "گربه هام" in text:
+        await mycats(update, ctx)
     elif "فروشگاه" in text:
         await shop(update, ctx)
+    elif "پورر" in text:
+        await purr(update, ctx)
+    elif "برترین" in text:
+        await top(update, ctx)
+    elif "آمار" in text:
+        await stats(update, ctx)
     elif "راهنما" in text:
         await help_cmd(update, ctx)
     else:
-        await update.message.reply_text("😸 این دستور رو نمی‌شناسم!\n/help بزن یا از دکمه‌ها استفاده کن.", reply_markup=KEYBOARD)
+        await update.message.reply_text("😸 این دستور رو نمی‌شناسم!\nاز دکمه‌های پایین استفاده کن 👇", reply_markup=KEYBOARD)
 
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
@@ -371,14 +473,15 @@ def main():
     app.add_handler(CommandHandler("balance", balance))
     app.add_handler(CommandHandler("daily", daily))
     app.add_handler(CommandHandler("purr", purr))
-    app.add_handler(CommandHandler("transfer", transfer))
     app.add_handler(CommandHandler("adopt", adopt))
     app.add_handler(CommandHandler("mycats", mycats))
     app.add_handler(CommandHandler("shop", shop))
-    app.add_handler(CommandHandler("buy", buy))
     app.add_handler(CommandHandler("top", top))
+    app.add_handler(CommandHandler("transfer", transfer))
+    app.add_handler(CommandHandler("stats", stats))
     app.add_handler(CommandHandler("help", help_cmd))
     app.add_handler(CommandHandler("addmeow", addmeow))
+    app.add_handler(CallbackQueryHandler(shop_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     print("🐱 بانک‌میو در حال اجراست...")
     app.run_polling()
